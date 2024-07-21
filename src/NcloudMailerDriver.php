@@ -2,6 +2,7 @@
 	
 	namespace Daworks\NcloudMailer;
 	
+	use DateTime;
 	use Symfony\Component\Mailer\SentMessage;
 	use Symfony\Component\Mailer\Transport\AbstractTransport;
 	use Symfony\Component\Mime\MessageConverter;
@@ -22,16 +23,35 @@
 			parent::__construct();
 		}
 		
+		protected function makeSignature($timestamp)
+		{
+			$space = " ";
+			$newLine = "\n";
+			$method = "POST";
+			$uri= "/api/v1/mails";
+			$accessKey = $this->authKey;
+			$secretKey = $this->serviceSecret;
+			
+			$hmac = $method.$space.$uri.$newLine.$timestamp.$newLine.$accessKey;
+			
+			return base64_encode(hash_hmac('sha256', $hmac, $secretKey,true));
+		}
+		
 		protected function doSend(SentMessage $message): void
 		{
 			$email = MessageConverter::toEmail($message->getOriginalMessage());
 			
 			$attachments = $this->uploadAttachments($email);
 			
+			$timestamp = (new DateTime())->format('Uv');
+			$signature = $this->makeSignature($timestamp);
+			
 			$response = Http::withHeaders([
 				'Content-Type' => 'application/json',
-				'x-ncp-auth-key' => $this->authKey,
-				'x-ncp-service-secret' => $this->serviceSecret,
+				'x-ncp-apigw-timestamp' => $timestamp,
+				'x-ncp-iam-access-key' => $this->authKey,
+				'x-ncp-apigw-signature-v2' => $signature,
+				'x-ncp-lang' => 'ko-KR'
 			])->post($this->apiEndpoint, $this->formatEmailData($email, $attachments));
 			
 			if (!$response->successful()) {
