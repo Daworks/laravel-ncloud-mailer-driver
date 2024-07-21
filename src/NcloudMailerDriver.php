@@ -1,6 +1,6 @@
 <?php
 	
-	namespace Daworks\NcloudMailer;
+	namespace Daworks\NcloudCloudOutboundMailer;
 	
 	use DateTime;
 	use Symfony\Component\Mailer\SentMessage;
