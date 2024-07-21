@@ -6,7 +6,7 @@
 
 Composer를 통해 패키지를 설치하세요:
 
-````bash
+````
 composer require daworks/ncloud-cloud-outbound-mailer
 ````
 
@@ -21,8 +21,14 @@ NCLOUD_SERVICE_SECRET=your_service_secret_here
 ```
 
 
+2. 설정 파일 퍼블리싱
 
-2. `config/mail.php`에서 새 메일러를 설정하세요:
+```
+php artisan vendor:publish --provider="Daworks\NcloudCloudOutboundMailer\NcloudCloudOutboundMailerServiceProvider" --tag=config
+```
+
+
+3. `config/mail.php`에서 새 메일러를 설정하세요:
 
 ```php
 'mailers' => [
