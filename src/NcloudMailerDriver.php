@@ -2,12 +2,12 @@
 	
 	namespace Daworks\NcloudCloudOutboundMailer;
 	
-	use DateTime;
 	use Symfony\Component\Mailer\SentMessage;
 	use Symfony\Component\Mailer\Transport\AbstractTransport;
-	use Symfony\Component\Mime\MessageConverter;
 	use Symfony\Component\Mime\Email;
-	use Illuminate\Support\Facades\Http;
+	use Symfony\Component\Mime\MessageConverter;
+	use GuzzleHttp\Client;
+	use GuzzleHttp\Exception\GuzzleException;
 	
 	class NcloudMailerDriver extends AbstractTransport
 	{
@@ -15,47 +15,41 @@
 		protected $fileApiEndpoint = 'https://mail.apigw.ntruss.com/api/v1/files';
 		protected $authKey;
 		protected $serviceSecret;
+		protected $client;
 		
 		public function __construct(string $authKey, string $serviceSecret)
 		{
+			parent::__construct();
 			$this->authKey = $authKey;
 			$this->serviceSecret = $serviceSecret;
-			parent::__construct();
-		}
-		
-		protected function makeSignature($timestamp)
-		{
-			$space = " ";
-			$newLine = "\n";
-			$method = "POST";
-			$uri= "/api/v1/mails";
-			$accessKey = $this->authKey;
-			$secretKey = $this->serviceSecret;
-			
-			$hmac = $method.$space.$uri.$newLine.$timestamp.$newLine.$accessKey;
-			
-			return base64_encode(hash_hmac('sha256', $hmac, $secretKey,true));
+			$this->client = new Client();
 		}
 		
 		protected function doSend(SentMessage $message): void
 		{
 			$email = MessageConverter::toEmail($message->getOriginalMessage());
 			
-			$attachments = $this->uploadAttachments($email);
-			
-			$timestamp = (new DateTime())->format('Uv');
-			$signature = $this->makeSignature($timestamp);
-			
-			$response = Http::withHeaders([
-				'Content-Type' => 'application/json',
-				'x-ncp-apigw-timestamp' => $timestamp,
-				'x-ncp-iam-access-key' => $this->authKey,
-				'x-ncp-apigw-signature-v2' => $signature,
-				'x-ncp-lang' => 'ko-KR'
-			])->post($this->apiEndpoint, $this->formatEmailData($email, $attachments));
-			
-			if (!$response->successful()) {
-				throw new \Exception('Failed to send email: ' . $response->body());
+			try {
+				$attachments = $this->uploadAttachments($email);
+				
+				$timestamp = $this->getTimestamp();
+				$signature = $this->makeSignature($timestamp);
+				
+				$response = $this->client->post($this->apiEndpoint, [
+					'headers' => [
+						'Content-Type' => 'application/json',
+						'x-ncp-apigw-timestamp' => $timestamp,
+						'x-ncp-iam-access-key' => $this->authKey,
+						'x-ncp-apigw-signature-v2' => $signature,
+					],
+					'json' => $this->formatEmailData($email, $attachments),
+				]);
+				
+				if ($response->getStatusCode() !== 200) {
+					throw new \Exception('Failed to send email: ' . $response->getBody());
+				}
+			} catch (GuzzleException $e) {
+				throw new \Exception('HTTP request failed: ' . $e->getMessage());
 			}
 		}
 		
@@ -113,8 +107,27 @@
 			return $attachments;
 		}
 		
+		protected function makeSignature($timestamp)
+		{
+			$space = " ";
+			$newLine = "\n";
+			$method = "POST";
+			$uri= "/api/v1/mails";
+			$accessKey = $this->authKey;
+			$secretKey = $this->serviceSecret;
+			
+			$hmac = $method.$space.$uri.$newLine.$timestamp.$newLine.$accessKey;
+			
+			return base64_encode(hash_hmac('sha256', $hmac, $secretKey, true));
+		}
+		
+		protected function getTimestamp()
+		{
+			return round(microtime(true) * 1000);
+		}
+		
 		public function __toString(): string
 		{
-			return 'ncloud-mailer';
+			return 'ncloud';
 		}
 	}
