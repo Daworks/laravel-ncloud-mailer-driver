@@ -3,13 +3,13 @@
 이 패키지는 Laravel 버전 10 이상에서 Ncloud Cloud Outbound Mailer를 사용할 수 있게 해주는 메일러 드라이버입니다.
 
 
-## 요구사항
+### 요구사항
 
 - PHP 8.1 이상
-- Laravel 11.x
+- Laravel 10.x, 11.x
 
 
-## 설치
+### 설치
 
 Composer를 통해 패키지를 설치하세요:
 
@@ -18,7 +18,7 @@ composer require daworks/ncloud-cloud-outbound-mailer
 ````
 
 
-## 설정
+### 설정
 
 1. `.env` 파일에 Ncloud 인증 정보를 추가하세요:
 
@@ -47,7 +47,7 @@ php artisan vendor:publish --provider="Daworks\NcloudCloudOutboundMailer\NcloudC
 'default' => 'ncloud',
 ```
 
-## 사용
+### 사용
 
 일반적인 Laravel 메일 기능을 그대로 사용하면 됩니다. 예:
 
@@ -55,3 +55,13 @@ php artisan vendor:publish --provider="Daworks\NcloudCloudOutboundMailer\NcloudC
 Mail::to($request->user())->send(new OrderShipped($order));
 ```
 
+
+### 기타
+
+laravel 6.x ~ 8.x는 아래와 같이 설치해서 사용하세요.
+
+```
+composer require daworks/ncloud-mailer-for-laravel6to8
+```
+
+참고 : https://github.com/Daworks/ncloud-mailer-for-laravel6to8
