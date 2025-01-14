@@ -30,7 +30,7 @@
       ]
     },
     "branch-alias": {
-      "dev-dev": "1.0.22-dev"
+      "dev": "1.0.22-dev"
     }
   },
   "license": "MIT",
