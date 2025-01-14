@@ -28,9 +28,6 @@
       "providers": [
         "Daworks\\NcloudCloudOutboundMailer\\NcloudCloudOutboundMailerServiceProvider"
       ]
-    },
-    "branch-alias": {
-      "dev": "1.0.22-dev"
     }
   },
   "license": "MIT",
