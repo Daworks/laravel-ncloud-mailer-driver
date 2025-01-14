@@ -2,7 +2,8 @@
 	
 	namespace Daworks\NcloudCloudOutboundMailer;
 	
-	use Symfony\Component\Mailer\SentMessage;
+	use Illuminate\Support\Facades\Http;
+    use Symfony\Component\Mailer\SentMessage;
 	use Symfony\Component\Mailer\Transport\AbstractTransport;
 	use Symfony\Component\Mime\Email;
 	use Symfony\Component\Mime\MessageConverter;
