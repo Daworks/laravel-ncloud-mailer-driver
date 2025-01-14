@@ -6,7 +6,7 @@
 ### 요구사항
 
 - PHP 8.1 이상
-- Laravel 10.x, 11.x
+- Laravel 9.x 이상
 
 
 ### 설치
