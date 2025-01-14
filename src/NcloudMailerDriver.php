@@ -179,7 +179,7 @@
                 try {
                     $response = Http::attach(
                         'fileBody',
-                        $attachment->getBody()->getContents(),
+                        $attachment->getBody(),
                         $attachment->getFilename()
                     )->withHeaders([
                         'Content-Type' => 'multipart/form-data',
