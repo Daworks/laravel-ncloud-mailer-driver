@@ -190,31 +190,30 @@
             $totalSize = 0;
             
             foreach ($email->getAttachments() as $attachment) {
-                
                 $filename = $attachment->getFilename();
-                $fileSize = strlen($attachment->getBody());
+                $fileContent = $attachment->getBody();
+                $fileSize = strlen($fileContent);
                 
-                // 개별 파일 크기 체크
-                if ($fileSize > 10 * 1024 * 1024) { // 10MB
+                // 파일 크기 검증
+                if ($fileSize > 10 * 1024 * 1024) {
                     throw new \Exception("File size exceeds 10MB limit: " . $filename);
                 }
                 
-                // 전체 파일 크기 체크
                 $totalSize += $fileSize;
-                if ($totalSize > 20 * 1024 * 1024) { // 20MB
+                if ($totalSize > 20 * 1024 * 1024) {
                     throw new \Exception("Total attachment size exceeds 20MB limit");
                 }
                 
                 $timestamp = $this->getTimestamp();
-                $signature = $this->makeSignature($timestamp, '/api/v1/files');
+                $signature = $this->makeSignature($timestamp, '/api/v1/files');  // 파일 업로드용 서명 생성
                 
                 try {
+                    // multipart/form-data 형식으로 파일 업로드
                     $response = Http::attach(
-                        'fileList',  // API 매뉴얼에 맞게 수정
-                        $attachment->getBody(),
+                        'fileList',  // API 매뉴얼에 명시된 필드명
+                        $fileContent,
                         $filename
                     )->withHeaders([
-                        'Content-Type' => 'multipart/form-data',
                         'x-ncp-apigw-timestamp' => $timestamp,
                         'x-ncp-iam-access-key' => $this->authKey,
                         'x-ncp-apigw-signature-v2' => $signature,
@@ -222,40 +221,32 @@
                     
                     if ($response->successful()) {
                         $fileData = $response->json();
-                        $attachments[] = [
-                            'fileId' => $fileData['fileId'],
-                            'fileName' => $filename,
-                        ];
-                        
-                        $this->logger->debug(Lang::get('ncloud-mailer.messages.attachment_upload_success', [
-                            'filename' => $filename
-                        ]));
+                        if (isset($fileData['files'][0]['fileId'])) {
+                            $attachments[] = $fileData['files'][0]['fileId'];
+                        } else {
+                            throw new \Exception("Invalid response format from file upload API");
+                        }
                     } else {
-                        throw new \Exception(
-                            Lang::get('ncloud-mailer.messages.attachment_upload_failed', [
-                                'filename' => $filename
-                            ])
-                        );
+                        throw new \Exception("File upload failed: " . $response->body());
                     }
+                    
                 } catch (\Exception $e) {
-                    $this->logger->error(Lang::get('ncloud-mailer.messages.attachment_upload_failed', [
+                    $this->logger->error("File upload failed: " . $e->getMessage(), [
                         'filename' => $filename
-                    ]), [
-                        'error' => $e->getMessage()
                     ]);
-                    throw $e;
+                    throw new \Exception("첨부파일 업로드에 실패했습니다: " . $filename);
                 }
             }
             
             return $attachments;
         }
-        
-        protected function makeSignature(int $timestamp): string
+
+// 파일 업로드용 서명 생성 메서드 추가
+        protected function makeSignature(int $timestamp, string $uri): string
         {
             $space = " ";
             $newLine = "\n";
             $method = "POST";
-            $uri = "/api/v1/mails";
             
             $hmac = $method.$space.$uri.$newLine.$timestamp.$newLine.$this->authKey;
             
