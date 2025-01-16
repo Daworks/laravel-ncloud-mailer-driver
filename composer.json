@@ -1,5 +1,5 @@
 {
-  "name": "daworks/ncloud-cloud-outbound-mailer",
+  "name": "daworks/ncloud-outbound-mailer-driver",
   "description": "Ncloud Cloud Outbound Mailer driver for Laravel",
   "type": "library",
   "require": {
