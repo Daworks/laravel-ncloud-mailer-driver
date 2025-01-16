@@ -48,7 +48,7 @@ php artisan vendor:publish --provider="Daworks\NcloudCloudOutboundMailer\NcloudC
 
     # 모든 파일 발행
     php artisan vendor:publish --tag=ncloud-mailer
-    ```
+```
 
 2. `.env` 파일에 NCloud 인증 정보를 추가합니다:
 
