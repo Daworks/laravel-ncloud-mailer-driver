@@ -2,27 +2,53 @@
 
 이 패키지는 Laravel 프레임워크에서 NCloud Cloud Outbound Mailer를 사용할 수 있게 해주는 메일러 드라이버입니다.
 
+## 버전 호환성
+
+| Laravel 버전 | PHP 버전      | 패키지 버전 |
+|-------------|---------------|------------|
+| 9.x         | ^8.1          | ^1.0      |
+| 10.x        | ^8.1 - ^8.2   | ^1.0      |
+| 11.x        | ^8.2 - ^8.3   | ^1.0      |
+
 ## 요구사항
 
-- PHP 8.2 이상
-- Laravel 9.0 이상
+- PHP ^8.1|^8.2|^8.3
+- Laravel ^9.0|^10.0|^11.0
+- Symfony Mailer ^6.4|^7.0
 - NCloud Cloud Outbound Mailer 서비스 계정
 
 ## 설치
 
-Composer를 통해 패키지를 설치할 수 있습니다:
 
 ```bash
-composer require daworks/ncloud-outbound-mailer-driver
+composer require daworks/ncloud-outbound-mailer-driver "^1.0"
 ```
+
 
 ## 설정
 
 1. 설정 파일을 발행합니다:
 
 ```bash
+php artisan vendor:publish --tag=ncloud-mailer
+```
+
+또는
+```bash
 php artisan vendor:publish --provider="Daworks\NcloudCloudOutboundMailer\NcloudCloudOutboundMailerServiceProvider"
 ```
+
+선택적으로 원하는 설정만 발행할 수 있습니다.
+```bash
+    # 설정 파일만 발행
+    php artisan vendor:publish --tag=ncloud-mailer-config
+
+    # 언어 파일만 발행
+    php artisan vendor:publish --tag=ncloud-mailer-lang
+
+    # 모든 파일 발행
+    php artisan vendor:publish --tag=ncloud-mailer
+    ```
 
 2. `.env` 파일에 NCloud 인증 정보를 추가합니다:
 
@@ -44,30 +70,6 @@ NCLOUD_MAIL_DEBUG=false
 ],
 ```
 
-## 사용법
-
-### 기본 사용법
-
-```php
-Mail::to('recipient@example.com')
-    ->send(new MyMailable());
-```
-
-### 첨부 파일 사용
-
-```php
-Mail::to('recipient@example.com')
-    ->send(new MyMailable($attachment));
-```
-
-### 다중 수신자
-
-```php
-Mail::to(['recipient1@example.com', 'recipient2@example.com'])
-    ->cc('cc@example.com')
-    ->bcc('bcc@example.com')
-    ->send(new MyMailable());
-```
 
 ## 고급 설정
 
@@ -100,14 +102,14 @@ NCLOUD_MAIL_DEBUG=true
 ### 일반적인 문제
 
 1. 인증 오류
-    - AUTH_KEY와 SERVICE_SECRET이 올바르게 설정되었는지 확인하세요.
+   - AUTH_KEY와 SERVICE_SECRET이 올바르게 설정되었는지 확인하세요.
 
 2. 첨부 파일 업로드 실패
-    - 파일 크기 제한을 확인하세요.
-    - 지원되는 파일 형식인지 확인하세요.
+   - 파일 크기 제한을 확인하세요.
+   - 지원되는 파일 형식인지 확인하세요.
 
 3. API 타임아웃
-    - NCLOUD_MAIL_TIMEOUT 값을 조정해보세요.
+   - NCLOUD_MAIL_TIMEOUT 값을 조정해보세요.
 
 ## 테스트
 
@@ -121,8 +123,8 @@ composer test
 
 MIT 라이선스 하에 배포됩니다. 자세한 내용은 [LICENSE](LICENSE) 파일을 참조하세요.
 
+## 이전 버전 지원
 
-## 라라벨 8버전 이하는 아래 링크를 참고하세요.
+Laravel 8.x 이하 버전을 사용하시는 경우 아래 링크를 참조하세요:
 
 [https://github.com/Daworks/ncloud-mailer-for-laravel6to8](https://github.com/Daworks/ncloud-mailer-for-laravel6to8)
-

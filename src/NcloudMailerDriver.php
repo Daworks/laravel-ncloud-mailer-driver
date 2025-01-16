@@ -3,6 +3,7 @@
     namespace Daworks\NcloudCloudOutboundMailer;
     
     use Illuminate\Support\Facades\Http;
+    use Illuminate\Support\Facades\Lang;
     use Symfony\Component\Mailer\SentMessage;
     use Symfony\Component\Mailer\Transport\AbstractTransport;
     use Symfony\Component\Mime\Email;
@@ -11,10 +12,6 @@
     use GuzzleHttp\Exception\GuzzleException;
     use Psr\Log\LoggerInterface;
     use Psr\Log\NullLogger;
-    
-    class NcloudMailerException extends \Exception {}
-    class NcloudAttachmentException extends NcloudMailerException {}
-    class NcloudApiException extends NcloudMailerException {}
     
     class NcloudMailerDriver extends AbstractTransport
     {
@@ -27,6 +24,20 @@
         protected int $timeout;
         protected int $retries;
         
+        // Ncloud API 에러 코드 정의
+        protected const ERROR_MESSAGES = [
+            77101 => 'Login information error',
+            77102 => 'Bad request',
+            77103 => 'Requested resource does not exist',
+            77201 => 'No permission for the requested resource',
+            77202 => 'Email service not subscribed',
+            77001 => 'Method not allowed',
+            77002 => 'Unsupported media type',
+            77301 => 'Default project does not exist',
+            77302 => 'External system API integration error',
+            77303 => 'Internal server error'
+        ];
+        
         public function __construct(
             string $authKey,
             string $serviceSecret,
@@ -37,7 +48,7 @@
             parent::__construct();
             
             if (empty($authKey) || empty($serviceSecret)) {
-                throw new NcloudMailerException('Auth key and service secret are required');
+                throw new \Exception('Auth key and service secret are required');
             }
             
             $this->authKey = $authKey;
@@ -53,7 +64,7 @@
             $email = MessageConverter::toEmail($message->getOriginalMessage());
             
             try {
-                $this->logger->info('Starting to send email', [
+                $this->logger->info(Lang::get('ncloud-mailer.messages.sending'), [
                     'subject' => $email->getSubject(),
                     'from' => $email->getFrom()[0]->getAddress(),
                     'to' => array_map(fn($to) => $to->getAddress(), $email->getTo())
@@ -79,42 +90,48 @@
                             'json' => $emailData,
                         ]);
                         
+                        $statusCode = $response->getStatusCode();
                         $responseData = json_decode($response->getBody()->getContents(), true);
                         
-                        if ($response->getStatusCode() !== 200) {
-                            throw new NcloudApiException(
-                                sprintf('API error: %s', $responseData['message'] ?? 'Unknown error')
-                            );
+                        if ($statusCode === 201) {
+                            $this->logger->info(Lang::get('ncloud-mailer.messages.sent_success'), [
+                                'requestId' => $responseData['requestId'] ?? null,
+                                'count' => $responseData['count'] ?? 1
+                            ]);
+                            break;
                         }
                         
-                        $this->logger->info('Email sent successfully', [
-                            'requestId' => $responseData['requestId'] ?? null,
-                            'subject' => $email->getSubject()
-                        ]);
+                        // 에러 응답 처리
+                        $errorCode = $responseData['code'] ?? null;
+                        $statusMessage = Lang::get('ncloud-mailer.status.' . $statusCode);
+                        $errorMessage = $this->getErrorMessage($errorCode);
                         
-                        break;
+                        $fullErrorMessage = "{$statusMessage}: {$errorMessage}";
+                        throw new \Exception($fullErrorMessage);
+                        
                     } catch (GuzzleException $e) {
                         $attempts++;
                         if ($attempts >= $this->retries) {
-                            $this->logger->error('Failed to send email after max retries', [
+                            $this->logger->error(Lang::get('ncloud-mailer.messages.max_retries_exceeded', [
+                                'max_retries' => $this->retries
+                            ]), [
                                 'error' => $e->getMessage(),
                                 'attempts' => $attempts
                             ]);
-                            throw new NcloudMailerException(
-                                'Failed to send email after ' . $this->retries . ' attempts: ' . $e->getMessage()
-                            );
+                            throw new \Exception($e->getMessage());
                         }
-                        $this->logger->warning('Retry sending email', [
-                            'attempt' => $attempts,
+                        
+                        $this->logger->warning(Lang::get('ncloud-mailer.messages.retry_attempt', [
+                            'attempt' => $attempts
+                        ]), [
                             'error' => $e->getMessage()
                         ]);
-                        sleep(1); // Wait before retry
+                        sleep(1);
                     }
                 } while ($attempts < $this->retries);
                 
             } catch (\Exception $e) {
-                $this->logger->error('Email sending failed', [
-                    'error' => $e->getMessage(),
+                $this->logger->error($e->getMessage(), [
                     'subject' => $email->getSubject()
                 ]);
                 throw $e;
@@ -172,15 +189,17 @@
             $attachments = [];
             
             foreach ($email->getAttachments() as $attachment) {
-                $this->logger->debug('Uploading attachment', [
-                    'filename' => $attachment->getFilename()
-                ]);
+                $filename = $attachment->getFilename();
+                
+                $this->logger->debug(Lang::get('ncloud-mailer.messages.attachment_upload_start', [
+                    'filename' => $filename
+                ]));
                 
                 try {
                     $response = Http::attach(
                         'fileBody',
                         $attachment->getBody(),
-                        $attachment->getFilename()
+                        $filename
                     )->withHeaders([
                         'Content-Type' => 'multipart/form-data',
                         'x-ncp-auth-key' => $this->authKey,
@@ -191,26 +210,26 @@
                         $fileData = $response->json();
                         $attachments[] = [
                             'fileId' => $fileData['fileId'],
-                            'fileName' => $attachment->getFilename(),
+                            'fileName' => $filename,
                         ];
                         
-                        $this->logger->debug('Attachment uploaded successfully', [
-                            'filename' => $attachment->getFilename(),
-                            'fileId' => $fileData['fileId']
-                        ]);
+                        $this->logger->debug(Lang::get('ncloud-mailer.messages.attachment_upload_success', [
+                            'filename' => $filename
+                        ]));
                     } else {
-                        throw new NcloudAttachmentException(
-                            'Failed to upload attachment: ' . $response->body()
+                        throw new \Exception(
+                            Lang::get('ncloud-mailer.messages.attachment_upload_failed', [
+                                'filename' => $filename
+                            ])
                         );
                     }
                 } catch (\Exception $e) {
-                    $this->logger->error('Attachment upload failed', [
-                        'filename' => $attachment->getFilename(),
+                    $this->logger->error(Lang::get('ncloud-mailer.messages.attachment_upload_failed', [
+                        'filename' => $filename
+                    ]), [
                         'error' => $e->getMessage()
                     ]);
-                    throw new NcloudAttachmentException(
-                        'Failed to upload attachment: ' . $e->getMessage()
-                    );
+                    throw $e;
                 }
             }
             
@@ -237,5 +256,15 @@
         public function __toString(): string
         {
             return 'ncloud';
+        }
+        
+        protected function getErrorMessage(?int $code): string
+        {
+            if ($code === null) {
+                return Lang::get('ncloud-mailer.messages.unknown_error');
+            }
+            
+            return Lang::get('ncloud-mailer.errors.' . $code) ??
+                Lang::get('ncloud-mailer.messages.unknown_error_code', ['code' => $code]);
         }
     }
