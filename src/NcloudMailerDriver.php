@@ -187,23 +187,37 @@
         protected function uploadAttachments(Email $email): array
         {
             $attachments = [];
+            $totalSize = 0;
             
             foreach ($email->getAttachments() as $attachment) {
-                $filename = $attachment->getFilename();
                 
-                $this->logger->debug(Lang::get('ncloud-mailer.messages.attachment_upload_start', [
-                    'filename' => $filename
-                ]));
+                $filename = $attachment->getFilename();
+                $fileSize = strlen($attachment->getBody());
+                
+                // 개별 파일 크기 체크
+                if ($fileSize > 10 * 1024 * 1024) { // 10MB
+                    throw new \Exception("File size exceeds 10MB limit: " . $filename);
+                }
+                
+                // 전체 파일 크기 체크
+                $totalSize += $fileSize;
+                if ($totalSize > 20 * 1024 * 1024) { // 20MB
+                    throw new \Exception("Total attachment size exceeds 20MB limit");
+                }
+                
+                $timestamp = $this->getTimestamp();
+                $signature = $this->makeSignature($timestamp, '/api/v1/files');
                 
                 try {
                     $response = Http::attach(
-                        'fileBody',
+                        'fileList',  // API 매뉴얼에 맞게 수정
                         $attachment->getBody(),
                         $filename
                     )->withHeaders([
                         'Content-Type' => 'multipart/form-data',
-                        'x-ncp-auth-key' => $this->authKey,
-                        'x-ncp-service-secret' => $this->serviceSecret,
+                        'x-ncp-apigw-timestamp' => $timestamp,
+                        'x-ncp-iam-access-key' => $this->authKey,
+                        'x-ncp-apigw-signature-v2' => $signature,
                     ])->post($this->fileApiEndpoint);
                     
                     if ($response->successful()) {
