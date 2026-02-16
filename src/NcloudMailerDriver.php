@@ -1,7 +1,7 @@
 <?php
-    
+
     namespace Daworks\NcloudCloudOutboundMailer;
-    
+
     use Illuminate\Support\Facades\Lang;
     use Symfony\Component\Mailer\SentMessage;
     use Symfony\Component\Mailer\Transport\AbstractTransport;
@@ -11,7 +11,7 @@
     use GuzzleHttp\Exception\GuzzleException;
     use Psr\Log\LoggerInterface;
     use Psr\Log\NullLogger;
-    
+
     class NcloudMailerDriver extends AbstractTransport
     {
         protected string $apiEndpoint = 'https://mail.apigw.ntruss.com/api/v1/mails';
@@ -22,7 +22,7 @@
         protected LoggerInterface $logger;
         protected int $timeout;
         protected int $retries;
-        
+
         // Ncloud API 에러 코드 정의
         protected const ERROR_MESSAGES = [
             77101 => 'Login information error',
@@ -36,20 +36,20 @@
             77302 => 'External system API integration error',
             77303 => 'Internal server error'
         ];
-        
+
         public function __construct(
             string $authKey,
             string $serviceSecret,
-            LoggerInterface $logger = null,
+            ?LoggerInterface $logger = null,
             int $timeout = 30,
             int $retries = 3
         ) {
             parent::__construct();
-            
+
             if (empty($authKey) || empty($serviceSecret)) {
                 throw new \Exception('Auth key and service secret are required');
             }
-            
+
             $this->authKey = $authKey;
             $this->serviceSecret = $serviceSecret;
             $this->client = new Client(['timeout' => $timeout]);
@@ -57,25 +57,25 @@
             $this->timeout = $timeout;
             $this->retries = $retries;
         }
-        
+
         protected function doSend(SentMessage $message): void
         {
             $email = MessageConverter::toEmail($message->getOriginalMessage());
-            
+
             try {
                 $this->logger->info(Lang::get('ncloud-mailer.messages.sending'), [
                     'subject' => $email->getSubject(),
                     'from'    => $email->getFrom()[0]->getAddress(),
                     'to'      => array_map(fn($to) => $to->getAddress(), $email->getTo())
                 ]);
-                
+
                 $attachments = $this->uploadAttachments($email);
-                
+
                 $timestamp = $this->getTimestamp();
                 $signature = $this->makeSignature($timestamp, '/api/v1/mails');
-                
+
                 $emailData = $this->formatEmailData($email, $attachments);
-                
+
                 $attempts = 0;
                 do {
                     try {
@@ -88,22 +88,22 @@
                             ],
                             'json'    => $emailData,
                         ]);
-                        
+
                         $statusCode = $response->getStatusCode();
                         $responseData = json_decode($response->getBody()->getContents(), true);
-                        
+
                         if ($statusCode === 201) {
                             break;
                         }
-                        
+
                         // 에러 응답 처리
                         $errorCode = $responseData['code'] ?? null;
                         $statusMessage = Lang::get('ncloud-mailer.status.'.$statusCode);
                         $errorMessage = $this->getErrorMessage($errorCode);
-                        
+
                         $fullErrorMessage = "{$statusMessage}: {$errorMessage}";
                         throw new \Exception($fullErrorMessage);
-                        
+
                     } catch (GuzzleException $e) {
                         $attempts++;
                         if ($attempts >= $this->retries) {
@@ -115,7 +115,7 @@
                             ]);
                             throw new \Exception($e->getMessage());
                         }
-                        
+
                         $this->logger->warning(Lang::get('ncloud-mailer.messages.retry_attempt', [
                             'attempt' => $attempts
                         ]), [
@@ -124,7 +124,7 @@
                         sleep(1);
                     }
                 } while ($attempts < $this->retries);
-                
+
             } catch (\Exception $e) {
                 $this->logger->error($e->getMessage(), [
                     'subject' => $email->getSubject()
@@ -132,7 +132,7 @@
                 throw $e;
             }
         }
-        
+
         protected function formatEmailData(Email $email, array $attachments): array
         {
             $recipients = [];
@@ -143,7 +143,7 @@
                     'type'    => 'R'
                 ];
             }
-            
+
             // Add CC recipients if any
             foreach ($email->getCc() as $address) {
                 $recipients[] = [
@@ -152,7 +152,7 @@
                     'type'    => 'C'
                 ];
             }
-            
+
             // Add BCC recipients if any
             foreach ($email->getBcc() as $address) {
                 $recipients[] = [
@@ -161,7 +161,7 @@
                     'type'    => 'B'
                 ];
             }
-            
+
             $data = [
                 'senderAddress' => $email->getFrom()[0]->getAddress(),
                 'senderName'    => $email->getFrom()[0]->getName() ?: '',
@@ -171,36 +171,36 @@
                 'individual'    => false,
                 'advertising'   => false,
             ];
-            
+
             if (!empty($attachments)) {
                 $data['attachFileIds'] = $attachments;
             }
-            
+
             return $data;
         }
-        
+
         protected function uploadAttachments(Email $email): array
         {
             $attachments = [];
             $totalSize = 0;
-            
+
             foreach ($email->getAttachments() as $attachment) {
                 $filename = $attachment->getFilename();
                 $fileContent = $attachment->getBody();
                 $fileSize = strlen($fileContent);
-                
+
                 if ($fileSize > 10 * 1024 * 1024) {
                     throw new \Exception("File size exceeds 10MB limit: ".$filename);
                 }
-                
+
                 $totalSize += $fileSize;
                 if ($totalSize > 20 * 1024 * 1024) {
                     throw new \Exception("Total attachment size exceeds 20MB limit");
                 }
-                
+
                 $timestamp = $this->getTimestamp();
                 $signature = $this->makeSignature($timestamp, '/api/v1/files');
-                
+
                 try {
                     $response = $this->client->post($this->fileApiEndpoint, [
                         'headers'   => [
@@ -216,50 +216,50 @@
                             ]
                         ]
                     ]);
-                    
+
                     $responseData = json_decode($response->getBody()->getContents(), true);
-                    
+
                     if ($response->getStatusCode() === 201 && isset($responseData['files'][0]['fileId'])) {
                         $attachments[] = $responseData['files'][0]['fileId'];
                     } else {
                         throw new \Exception("File upload failed: Invalid response");
                     }
-                    
+
                 } catch (\Exception $e) {
                     throw new \Exception("첨부파일 업로드에 실패했습니다: ".$filename);
                 }
             }
-            
+
             return $attachments;
         }
-        
+
         protected function makeSignature(int $timestamp, string $uri): string
         {
             $space = " ";
             $newLine = "\n";
             $method = "POST";
-            
+
             $hmac = $method.$space.$uri.$newLine.$timestamp.$newLine.$this->authKey;
-            
+
             return base64_encode(hash_hmac('sha256', $hmac, $this->serviceSecret, true));
         }
-        
+
         protected function getTimestamp(): int
         {
             return (int) round(microtime(true) * 1000);
         }
-        
+
         public function __toString(): string
         {
             return 'ncloud';
         }
-        
+
         protected function getErrorMessage(?int $code): string
         {
             if ($code === null) {
                 return Lang::get('ncloud-mailer.messages.unknown_error');
             }
-            
+
             return Lang::get('ncloud-mailer.errors.'.$code) ??
                 Lang::get('ncloud-mailer.messages.unknown_error_code', ['code' => $code]);
         }
