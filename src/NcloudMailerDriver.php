@@ -93,6 +93,16 @@
                         $responseData = json_decode($response->getBody()->getContents(), true);
 
                         if ($statusCode === 201) {
+                            // ncloud 는 발송 요청마다 requestId 를 돌려준다. 이 값이 있어야
+                            // 콘솔의 발송 내역과 애플리케이션 기록을 대조할 수 있다. 그대로
+                            // 두면 SentMessage 에는 심포니가 만든 로컬 Message-ID 가 남는데,
+                            // 그 값은 API 요청 본문에 실리지 않아 어디서도 조회되지 않는다.
+                            //
+                            // 응답 형태가 달라지더라도 이미 접수된 발송을 실패로 만들지는 않는다.
+                            if (! empty($responseData['requestId'])) {
+                                $message->setMessageId((string) $responseData['requestId']);
+                            }
+
                             break;
                         }
 
