@@ -49,6 +49,7 @@
             'attachment_upload_start' => 'Uploading attachment: :filename',
             'attachment_upload_success' => 'Attachment uploaded successfully: :filename',
             'attachment_upload_failed' => 'Failed to upload attachment: :filename',
+            'attachment_upload_retry' => 'Retrying attachment upload (attempt :attempt failed): :filename',
             
             // Other Error Messages
             'unknown_error' => 'An unknown error occurred',

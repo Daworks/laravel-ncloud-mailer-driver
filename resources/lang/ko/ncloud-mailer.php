@@ -49,6 +49,7 @@
             'attachment_upload_start' => '첨부파일을 업로드하는 중입니다: :filename',
             'attachment_upload_success' => '첨부파일이 성공적으로 업로드되었습니다: :filename',
             'attachment_upload_failed' => '첨부파일 업로드에 실패했습니다: :filename',
+            'attachment_upload_retry' => '첨부파일 업로드를 재시도합니다 (:attempt번째 시도 실패): :filename',
             
             // 기타 에러 메시지
             'unknown_error' => '알 수 없는 오류가 발생했습니다',

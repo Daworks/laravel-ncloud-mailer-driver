@@ -208,6 +208,25 @@
                     throw new \Exception("Total attachment size exceeds 20MB limit");
                 }
 
+                $attachments[] = $this->uploadAttachment($filename, $fileContent);
+            }
+
+            return $attachments;
+        }
+
+        /**
+         * 첨부파일 하나를 ncloud 파일 API 에 올리고 fileId 를 돌려준다.
+         *
+         * ncloud 파일 API 는 간헐적으로 응답 없이 멈춘다(정상은 1~2초, 멈추면 타임아웃까지
+         * 0바이트). 본문 발송과 같은 횟수만큼 재시도하고, 서명은 매 시도마다 새 타임스탬프로
+         * 다시 만든다. 실패 사유는 로그와 예외 메시지에 그대로 남겨 원인을 추적할 수 있게 한다.
+         */
+        protected function uploadAttachment(string $filename, string $fileContent): string
+        {
+            $attempts = 0;
+
+            do {
+                $attempts++;
                 $timestamp = $this->getTimestamp();
                 $signature = $this->makeSignature($timestamp, '/api/v1/files');
 
@@ -230,17 +249,32 @@
                     $responseData = json_decode($response->getBody()->getContents(), true);
 
                     if ($response->getStatusCode() === 201 && isset($responseData['files'][0]['fileId'])) {
-                        $attachments[] = $responseData['files'][0]['fileId'];
-                    } else {
-                        throw new \Exception("File upload failed: Invalid response");
+                        return $responseData['files'][0]['fileId'];
                     }
 
-                } catch (\Exception $e) {
-                    throw new \Exception("첨부파일 업로드에 실패했습니다: ".$filename);
+                    $reason = sprintf('HTTP %d, code=%s', $response->getStatusCode(), $responseData['code'] ?? '-');
+                } catch (GuzzleException $e) {
+                    $reason = $e->getMessage();
                 }
-            }
 
-            return $attachments;
+                if ($attempts >= $this->retries) {
+                    $this->logger->error(Lang::get('ncloud-mailer.messages.attachment_upload_failed', [
+                        'filename' => $filename
+                    ]), [
+                        'error'    => $reason,
+                        'attempts' => $attempts
+                    ]);
+                    throw new \Exception(Lang::get('ncloud-mailer.messages.attachment_upload_failed', [
+                        'filename' => $filename
+                    ]).' ('.$reason.')');
+                }
+
+                $this->logger->warning(Lang::get('ncloud-mailer.messages.attachment_upload_retry', [
+                    'filename' => $filename,
+                    'attempt'  => $attempts
+                ]), ['error' => $reason]);
+                sleep(1);
+            } while (true);
         }
 
         protected function makeSignature(int $timestamp, string $uri): string

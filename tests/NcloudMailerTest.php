@@ -4,6 +4,8 @@
     
     use Daworks\NcloudCloudOutboundMailer\NcloudMailerDriver;
     use GuzzleHttp\Client;
+    use GuzzleHttp\Exception\ConnectException;
+    use GuzzleHttp\Psr7\Request;
     use GuzzleHttp\Handler\MockHandler;
     use GuzzleHttp\HandlerStack;
     use GuzzleHttp\Psr7\Response;
@@ -148,14 +150,42 @@
         }
 
         /**
-         * 첨부 없는 메일 한 통을 주어진 응답으로 발송하고 SentMessage 를 돌려준다.
+         * ncloud 파일 API 는 간헐적으로 응답 없이 멈춘다. 첫 업로드가 타임아웃되더라도
+         * 재시도해서 올라가면 발송은 성공해야 한다.
          */
-        private function send(Response $response): SentMessage
+        public function testRetriesAttachmentUploadAfterTimeout(): void
+        {
+            $sent = $this->send([
+                new ConnectException('cURL error 28: Operation timed out', new Request('POST', '/api/v1/files')),
+                new Response(201, [], json_encode(['files' => [['fileId' => 'file-1']]])),
+                new Response(201, [], json_encode(['requestId' => 'req-1', 'count' => 1])),
+            ], true);
+
+            $this->assertSame('req-1', $sent->getMessageId());
+        }
+
+        /**
+         * 재시도 횟수를 다 써도 실패하면 예외 메시지에 실제 사유가 남아야 한다.
+         */
+        public function testReportsUploadFailureReasonAfterRetriesExhausted(): void
+        {
+            $timeout = fn() => new ConnectException('cURL error 28: Operation timed out', new Request('POST', '/api/v1/files'));
+
+            $this->expectException(\Exception::class);
+            $this->expectExceptionMessage('cURL error 28');
+
+            $this->send([$timeout(), $timeout(), $timeout()], true);
+        }
+
+        /**
+         * 메일 한 통을 주어진 응답(들)으로 발송하고 SentMessage 를 돌려준다.
+         */
+        private function send(Response|array $responses, bool $withAttachment = false): SentMessage
         {
             $driver = new NcloudMailerDriver('test-key', 'test-secret', new NullLogger());
 
             $client = new Client([
-                'handler' => HandlerStack::create(new MockHandler([$response])),
+                'handler' => HandlerStack::create(new MockHandler(is_array($responses) ? $responses : [$responses])),
             ]);
 
             $clientProperty = new \ReflectionProperty($driver, 'client');
@@ -167,6 +197,10 @@
                 ->to('recipient@example.com')
                 ->subject('제목')
                 ->text('본문');
+
+            if ($withAttachment) {
+                $email->attach('%PDF-1.4 test', 'receipt.pdf', 'application/pdf');
+            }
 
             $sent = new SentMessage($email, new Envelope(
                 new Address('sender@example.com'),
